@@ -1,4 +1,5 @@
 from copy import deepcopy
+import json
 
 import pytest
 
@@ -109,4 +110,10 @@ def test_repeated_groups_are_transitive_and_deterministic():
     first = analyze(trace)
     second = analyze(trace)
     assert first == second
+    json.dumps(first)
     assert first["repeated_evidence_groups"] == [["evidence-0", "evidence-1", "evidence-2"]]
+
+
+def test_containment_respects_token_boundaries():
+    unit = _split_units("cat facts")[0]
+    assert not _matches(unit, "concatenate facts")
