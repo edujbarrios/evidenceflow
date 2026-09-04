@@ -1,3 +1,3 @@
 # EvidenceFlow
 
-Evidence survival diagnostics for AI-agent traces.
+Track how retrieved and tool-generated evidence propagates through AI-agent traces.

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evidenceflow"
+version = "0.1.0"
+description = "Analyze how retrieved and tool-generated evidence propagates through AI-agent execution traces."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MPL-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Eduardo J. Barrios", email = "edujbarrios@outlook.com" }]
+keywords = ["ai", "agents", "llm", "rag", "observability", "evaluation", "tracing", "evidence", "provenance", "tool-calling", "information-flow"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "build", "twine"]
+
+[project.urls]
+Homepage = "https://github.com/edujbarrios/evidenceflow"
+Source = "https://github.com/edujbarrios/evidenceflow"
+Issues = "https://github.com/edujbarrios/evidenceflow/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
