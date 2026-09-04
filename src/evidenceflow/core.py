@@ -44,7 +44,7 @@ def _matches(unit: Mapping[str, Any], later_text: str) -> bool:
     if not later_normalized:
         return False
     normalized = unit["normalized"]
-    if normalized and normalized in later_normalized:
+    if normalized and f" {normalized} " in f" {later_normalized} ":
         return True
     source_tokens = set(unit["tokens"])
     later_tokens = set(_tokens(later_text))
