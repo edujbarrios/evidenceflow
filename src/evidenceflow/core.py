@@ -107,8 +107,138 @@ def _extract_evidence(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return evidence
 
 
+def _ratio(numerator: int, denominator: int) -> float:
+    return numerator / denominator if denominator else 0.0
+
+
+def _aggregate(records: list[dict[str, Any]], key: str) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for record in records:
+        name = record[key]
+        if name is None:
+            continue
+        item = result.setdefault(name, {
+            "evidence_sources": 0,
+            "evidence_units": 0,
+            "reused_units": 0,
+            "final_reused_units": 0,
+        })
+        item["evidence_sources"] += 1
+        item["evidence_units"] += record["evidence_units"]
+        item["reused_units"] += record["reused_units"]
+        item["final_reused_units"] += record["final_reused_units"]
+    for item in result.values():
+        item["survival_ratio"] = _ratio(item["reused_units"], item["evidence_units"])
+        item["final_answer_survival_ratio"] = _ratio(
+            item["final_reused_units"], item["evidence_units"]
+        )
+    return result
+
+
+def _repeated_groups(evidence: list[dict[str, Any]]) -> list[list[str]]:
+    adjacency = {item["evidence_id"]: set() for item in evidence}
+    for index, left in enumerate(evidence):
+        for right in evidence[index + 1:]:
+            repeated = any(
+                _matches(left_unit, right_unit["text"]) or _matches(right_unit, left_unit["text"])
+                for left_unit in left["units"]
+                for right_unit in right["units"]
+            )
+            if repeated:
+                adjacency[left["evidence_id"]].add(right["evidence_id"])
+                adjacency[right["evidence_id"]].add(left["evidence_id"])
+    groups = []
+    visited = set()
+    for item in evidence:
+        evidence_id = item["evidence_id"]
+        if evidence_id in visited or not adjacency[evidence_id]:
+            continue
+        stack = [evidence_id]
+        group = []
+        visited.add(evidence_id)
+        while stack:
+            current = stack.pop()
+            group.append(current)
+            for neighbor in adjacency[current]:
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    stack.append(neighbor)
+        order = {value["evidence_id"]: i for i, value in enumerate(evidence)}
+        groups.append(sorted(group, key=order.get))
+    return groups
+
+
 def analyze(trace: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     """Analyze apparent lexical evidence reuse in a normalized trace."""
     steps = _validate_trace(trace)
     evidence = _extract_evidence(steps)
-    return {"steps": len(steps), "evidence_sources": len(evidence)}
+    final_index = next(
+        (index for index in range(len(steps) - 1, -1, -1) if steps[index]["type"] == "assistant"),
+        None,
+    )
+    records = []
+    for item in evidence:
+        unit_reuse_steps = []
+        for unit in item["units"]:
+            reused_at = [
+                step["id"]
+                for step in steps[item["step_index"] + 1:]
+                if step["type"] in {"assistant", "reasoning"} and _matches(unit, step["content"])
+            ]
+            unit_reuse_steps.append(reused_at)
+        reused_units = sum(bool(value) for value in unit_reuse_steps)
+        final_reused_units = (
+            sum(steps[final_index]["id"] in value for value in unit_reuse_steps)
+            if final_index is not None and final_index > item["step_index"] else 0
+        )
+        reused_at = [
+            step["id"]
+            for step in steps[item["step_index"] + 1:]
+            if any(step["id"] in value for value in unit_reuse_steps)
+        ]
+        last_index = max((i for i, step in enumerate(steps) if step["id"] in reused_at), default=None)
+        records.append({
+            "evidence_id": item["evidence_id"],
+            "step_id": item["step_id"],
+            "source_type": item["source_type"],
+            "tool": item["tool"],
+            "source": item["source"],
+            "evidence_units": len(item["units"]),
+            "reused_units": reused_units,
+            "final_reused_units": final_reused_units,
+            "survival_ratio": _ratio(reused_units, len(item["units"])),
+            "final_answer_survival_ratio": _ratio(final_reused_units, len(item["units"])),
+            "reused_at": reused_at,
+            "reuse_count": len(reused_at),
+            "last_reuse_step": steps[last_index]["id"] if last_index is not None else None,
+            "steps_until_last_reuse": last_index - item["step_index"] if last_index is not None else None,
+        })
+
+    evidence_units = sum(item["evidence_units"] for item in records)
+    reused_units = sum(item["reused_units"] for item in records)
+    final_reused_units = sum(item["final_reused_units"] for item in records)
+    repeated_groups = _repeated_groups(evidence)
+    unused = [
+        {
+            "evidence_id": item["evidence_id"], "step_id": item["step_id"],
+            "tool": item["tool"], "source": item["source"], "evidence_units": item["evidence_units"],
+        }
+        for item in records if item["reused_units"] == 0
+    ]
+    return {
+        "steps": len(steps),
+        "evidence_sources": len(records),
+        "tool_results": sum(step["type"] == "tool_result" for step in steps),
+        "retrieval_steps": sum(step["type"] == "retrieval" for step in steps),
+        "evidence_units": evidence_units,
+        "reused_units": reused_units,
+        "final_reused_units": final_reused_units,
+        "overall_survival_ratio": _ratio(reused_units, evidence_units),
+        "final_answer_survival_ratio": _ratio(final_reused_units, evidence_units),
+        "apparently_unused_sources": len(unused),
+        "evidence": records,
+        "tools": _aggregate(records, "tool"),
+        "sources": _aggregate(records, "source"),
+        "unused_evidence": unused,
+        "repeated_evidence_groups": repeated_groups,
+    }
