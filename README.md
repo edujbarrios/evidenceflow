@@ -1,6 +1,6 @@
 # EvidenceFlow
 
-[![PyPI version](https://img.shields.io/pypi/v/evidenceflow.svg?label=PyPI&logo=pypi&cacheSeconds=300)](https://pypi.org/project/evidenceflow/)
+[![PyPI version](https://img.shields.io/pypi/v/evidenceflow?label=PyPI&logo=pypi&cacheSeconds=60)](https://pypi.org/project/evidenceflow/)
 [![License: MPL 2.0](https://img.shields.io/badge/license-MPL%202.0-blue.svg)](https://github.com/edujbarrios/evidenceflow/blob/main/LICENSE)
 
 Track how retrieved and tool-generated evidence propagates through AI-agent traces.
@@ -24,16 +24,36 @@ trace = [
         "id": "2",
         "type": "tool_result",
         "tool": "search",
-        "content": "The 1992 Summer Olympics were held in Barcelona, Spain.",
+        "content": (
+            "The 1992 Summer Olympics were held in Barcelona, Spain.\n\n"
+            "The official mascot was Cobi."
+        ),
     },
     {"id": "3", "type": "assistant", "content": "They were held in Barcelona, Spain."},
 ]
 
 report = analyze(trace)
 
-print(report["final_answer_survival_ratio"])
-print(report["tools"])
+summary_keys = (
+    "evidence_units",
+    "reused_units",
+    "final_reused_units",
+    "overall_survival_ratio",
+    "final_answer_survival_ratio",
+)
+
+print({key: report[key] for key in summary_keys})
+print(report["tools"]["search"])
 ```
+
+Output:
+
+```python
+{'evidence_units': 2, 'reused_units': 1, 'final_reused_units': 1, 'overall_survival_ratio': 0.5, 'final_answer_survival_ratio': 0.5}
+{'evidence_sources': 1, 'evidence_units': 2, 'reused_units': 1, 'final_reused_units': 1, 'survival_ratio': 0.5, 'final_answer_survival_ratio': 0.5}
+```
+
+The search result introduced two evidence units. The final response has detected overlap with the Barcelona unit, while the mascot unit does not appear later, so both overall and final-answer lexical survival are `0.5`.
 
 ## Why EvidenceFlow?
 
@@ -68,11 +88,12 @@ A retrieval step may provide a `source`, such as `manual.pdf`. `report["sources"
 
 An evidence source's survival ratio is:
 
-```text
-units with detected overlap in a later assistant or reasoning step
------------------------------------------------------------------
-                    evidence units introduced
-```
+$$
+\text{survival ratio}
+=
+\frac{\text{evidence units with detected overlap in a later assistant or reasoning step}}
+{\text{evidence units introduced}}
+$$
 
 Final-answer survival uses the same denominator but counts only units detected in the last assistant response. Empty denominators produce `0.0`.
 
